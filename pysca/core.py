@@ -44,11 +44,12 @@ class Pysca(object):
         self._snr_width = float(snr_width) if snr_width != None else None
         self._ofac = float(ofac)
         self._hifreq = float(hifreq) if hifreq != None else self._numax
-        self._last_ts = self._next_ts = None
-        self._nu = self._orig_per = self._last_per = self._next_per = None
-        self._freqs = []     # List of extracted frequencies
-        self._noise = []     # List of corresponding noise levels
-        self._optpar = None  # Start values (am, ph) for the fit (prewhiten)
+        self._prev_ts = self._next_ts = None
+        self._nu = self._orig_per = self._prev_per = self._next_per = None
+        self._freqs = []      # List of extracted frequencies
+        self._noise = []      # List of corresponding noise levels
+        self._optpar = None   # Start values (am, ph) for the fit (prewhiten)
+        self._results = None  # Caching variable for results
 
     @property
     def numin(self):
@@ -79,8 +80,8 @@ class Pysca(object):
         return self._a
 
     @property
-    def last_ts(self):
-        return self._last_ts
+    def prev_ts(self):
+        return self._prev_ts
 
     @property
     def next_ts(self):
@@ -101,12 +102,21 @@ class Pysca(object):
         return self._orig_per
 
     @property
-    def last_periodogram(self):
-        return self._last_per
+    def prev_periodogram(self):
+        return self._prev_per
 
     @property
     def next_periodogram(self):
         return self._next_per
+
+    @property
+    def results(self):
+        if self._results == None:
+            self._results = np.rec.fromarrays(
+                [ self.freqs, self.amplitudes, self.phases, self.noise,
+                  self.snr],
+                names=['freq', 'amp', 'phase', 'noise', 'snr'])
+        return self._results
 
     @property
     def freqs(self):
@@ -181,7 +191,7 @@ class Pysca(object):
         new_ts, new_optpar = prewhiten(self.t, self.orig_ts, self._freqs,
                                        self._optpar)
 
-        # amplitude of the last extracted frequency
+        # amplitude of the previously extracted frequency
         amp = new_optpar[-1][0]
 
         # Compute new periodogram from the prewhitened time series
@@ -194,12 +204,14 @@ class Pysca(object):
         self._noise.append(noise)
 
         # Update object data
-        self._last_per = self._next_per
-        self._last_ts = self._next_ts
+        self._prev_per = self._next_per
+        self._prev_ts = self._next_ts
         self._next_per = new_per
         self._next_ts = new_ts
         self._optpar = new_optpar
 
+        # clear results cache
+        self._results = None
 
     def run(self, n=None, amp_limit=None, snr_limit=None):
         """

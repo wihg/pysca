@@ -19,10 +19,21 @@ class Application(object):
     def _parse_opts(self):
         parser = OptionParser(
             usage='usage: %prog [options]',
-            description='Blah',
+            description='Extracts frequencies, amplitudes, phases and SNR from time series.',
             prog=self.name,
             version=pysca.__version__)
+        parser.formatter.max_help_position = 30
+        parser.add_option('-v', '--verbose', action='count', default=0,
+                dest='verbose', help='verbose text output, can be used multiple times')
         self.opts, self.args = parser.parse_args(args=self.argv)
+        print self.opts
+        print self.args
+
+    def _load_data(self):
+        pass
+
+    def _save_data(self):
+        pass
 
     def run(self):
         return 0

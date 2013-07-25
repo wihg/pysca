@@ -11,7 +11,8 @@ __email__ = 'kolja@kis.uni-freiburg.de'
 __license__ = 'MIT'
 
 class Pysca(object):
-    def __init__(self, t, a, numin, numax, snr_width, ofac=8.0, hifreq=None):
+    def __init__(self, t, a, numin, numax, snr_width, ofac=8.0, hifreq=None,
+                 verbose=0):
         """
         Pysca(t, a, numin, numax, snr_width, ofac=8.0, hifreq=None)
 
@@ -32,6 +33,8 @@ class Pysca(object):
             oversampling factor used for the Lomb-Scargle periodogram
         hifreq : None
             maximum frequency of the Lomb-Scargle periodogram; default: numax
+        verbose : int
+            verbose level from 0 (quiet) to 2 (verbose); default 0
 
         """
         self._t = np.asarray(t, dtype=np.float64)
@@ -108,6 +111,10 @@ class Pysca(object):
     @property
     def next_periodogram(self):
         return self._next_per
+
+    @property
+    def count(self):
+        return len(self._freqs)
 
     @property
     def results(self):
@@ -213,7 +220,7 @@ class Pysca(object):
         # clear results cache
         self._results = None
 
-    def run(self, n=None, amp_limit=None, snr_limit=None):
+    def run(self, n=1, amp_limit=None, snr_limit=None):
         """
         Parameters
         ----------
@@ -224,8 +231,26 @@ class Pysca(object):
         snr_limit : float or None
             signal-to-noise limit (termination condition); default: no limit
 
+        Return
+        ------
+            number of iterations
         """
         n = int(n) if n != None else None
         amp_limit = float(amp_limit) if amp_limit != None else None
         snr_limit = float(snr_limit) if snr_limit != None else None
+        if n == None and amp_limit == None and snr_limit == None:
+            raise RuntimeError('No termination condition was set.')
+
+        i = 0
+        while True:
+            if n != None and i >= n:
+                return i
+            if self.count > 0:
+                if amp_limit != None and self.amplitudes.min() < amp_limit:
+                    return i
+                if snr_limit != None and self.snr.min() < snr_limit:
+                    return i
+            self.step()
+            i += 1
+        return i
 

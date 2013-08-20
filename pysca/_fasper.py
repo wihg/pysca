@@ -38,6 +38,11 @@ Reference:
 # Because there is no copyright statement and the original IDL code was
 # released as public domain, this code is assumed to be public domain, too.
 
+# TODO: These routines are rather poorly written; they need to be replaced with
+# a better (and more efficient) implementation of the fasper algorithm or any
+# other algorithm that can do a fast computation of the Lomb-Scargle
+# periodogram (e.g. using non-uniform FFTs).
+
 from numpy import *
 from numpy.fft import *
 

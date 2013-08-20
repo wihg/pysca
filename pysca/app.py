@@ -1,6 +1,8 @@
 from __future__ import absolute_import
+from __future__ import print_function
 
-import os, sys, pyfits, pysca
+import os, sys
+from . import Pysca, __version__
 from optparse import OptionParser
 
 __author__ = 'Kolja Glogowski'
@@ -21,7 +23,7 @@ class Application(object):
             usage='usage: %prog [options]',
             description='Extracts frequencies, amplitudes, phases and SNR from time series.',
             prog=self.name,
-            version=pysca.__version__)
+            version=__version__)
         parser.formatter.max_help_position = 30
         parser.add_option('-v', '--verbose', action='count', default=0,
                 dest='verbose', help='verbose text output, can be used multiple times')

@@ -2,19 +2,27 @@ from __future__ import absolute_import
 
 import collections
 import numpy as np
-from ._fasper import fasper
-from ._prewhiten import prewhiten
+from . import utils, fit
+from .utils import ExportDecorator
 
-__author__ = 'Wiebke Herzberg, Kolja Glogowski'
+__author__ = 'Kolja Glogowski, Wiebke Herzberg'
 __maintainer__ = 'Kolja Glogowski'
 __email__ = 'kolja@kis.uni-freiburg.de'
 __license__ = 'MIT'
 
+__all__ = []
+export = ExportDecorator(__all__)
+
+@export
+class PyscaError(Exception):
+    pass
+
+@export
 class Pysca(object):
-    def __init__(self, t, a, numin, numax, snr_width, ofac=8.0, hifreq=None,
+    def __init__(self, t, a, numin, numax, snr_width, ofac=6.0, hifreq=None,
                  verbose=0):
         """
-        Pysca(t, a, numin, numax, snr_width, ofac=8.0, hifreq=None)
+        Pysca(t, a, numin, numax, snr_width, ofac=6.0, hifreq=None)
 
         Parameters
         ----------
@@ -35,14 +43,13 @@ class Pysca(object):
             maximum frequency of the Lomb-Scargle periodogram; default: numax
         verbose : int
             verbose level from 0 (quiet) to 2 (verbose); default 0
-
         """
         self._t = np.asarray(t, dtype=np.float64)
         self._a = np.asarray(a, dtype=np.float64)
         if self._t.ndim != 1 or self._a.ndim != 1:
-            raise ValueError('Input arrays must be 1d.')
-        elif self._t.size != self._a.size:
-            raise ValueError('Input arrays must have the same sizes.')
+            raise ValueError('Input arrays must be 1d')
+        elif len(self._t) != len(self._a):
+            raise ValueError('Input arrays must have the same sizes')
         self._numin, self._numax = float(numin), float(numax)
         self._snr_width = float(snr_width) if snr_width != None else None
         self._ofac = float(ofac)
@@ -146,41 +153,14 @@ class Pysca(object):
         return self.amplitudes / self.noise
 
     def _calc_periodogram(self, t, a):
-        nu, p, nout, jmax, var = fasper(t, a, self.ofac, hifreq=self.hifreq)
-        # Note: amplitudes from fasper are not scaled correctly. To get
-        # amplitudes corresponding to the amplitude values from the fit, do
-        # the normalization 2.0*sqrt(var*wk2(i)/n) (from kperiod).
-        psq = 2.0 * np.sqrt(var * p / len(a))
-        return nu, psq
+        return utils.compute_periodogram(t, a, self.ofac, self.hifreq)
 
     def _find_highest_peak(self, nu, per, use_nuidx=True):
         if use_nuidx:
-            # Limit the periodogram to selected frequency range
+            # Limit the periodogram to selected frequency range.
             nu = nu[self._nuidx]
             per = per[self._nuidx]
-
-        # Get index of highest peak in selected range
-        imax = np.argmax(per)
-
-        # Determine the frequency value by parabolic interpolation, which is
-        # only possible if the maximum is not at the beginning of or end
-        # of the periodogram.
-        if imax == 0 or imax == per.size - 1:
-            peak = per[imax]
-        else:
-            # Get values around the maximum
-            frq1 = nu[imax-1]
-            frq2 = nu[imax]
-            frq3 = nu[imax+1]
-            y1 = per[imax-1]
-            y2 = per[imax]
-            y3 = per[imax+1]
-
-            # Parabolic interpolation formula
-            t1 = (y2-y3) * (frq2-frq1)**2 - (y2-y1) * (frq2-frq3)**2
-            t2 = (y2-y3) * (frq2-frq1) - (y2-y1) * (frq2-frq3)
-            peak = frq2 - 0.5 * t1/t2
-        return peak
+        return utils.find_highest_peak(nu, per)
 
     def step(self):
         if self._next_per == None:
@@ -195,8 +175,8 @@ class Pysca(object):
         self._freqs.append(freq)
 
         # Prewhiten the original time series with all extracted frequencies
-        new_ts, new_optpar = prewhiten(self.t, self.orig_ts, self._freqs,
-                                       self._optpar)
+        new_ts, new_optpar = fit.prewhiten_compat(
+            self.t, self.orig_ts, self._freqs, self._optpar)
 
         # amplitude of the previously extracted frequency
         amp = new_optpar[-1][0]
@@ -204,10 +184,8 @@ class Pysca(object):
         # Compute new periodogram from the prewhitened time series
         new_nu, new_per = self._calc_periodogram(self.t, new_ts)
 
-        # Calculate noise for the last extracted frequency using the median
-        idx = (nu >= freq - 0.5 * self.snr_width) & (
-               nu <= freq + 0.5 * self.snr_width)
-        noise = np.median(new_per[idx])
+        # Compute noise for the last extracted frequency using the median
+        noise = utils.median_noise_level(nu, new_per, freq, self.snr_width)
         self._noise.append(noise)
 
         # Update object data

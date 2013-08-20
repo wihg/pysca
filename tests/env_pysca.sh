@@ -8,6 +8,6 @@ else
     export PYTHONPATH=${__base_dir}:${PYTHONPATH}
 fi
 
-export PATH=$PATH:${__base_dir}/bin
+export PATH=${__base_dir}/bin:$PATH
 
 unset __base_dir

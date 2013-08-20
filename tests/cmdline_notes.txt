@@ -1,0 +1,32 @@
+Usage: pysca -f FMIN -F FMAX -b NOIBOX -o OUTFILE [options] TSFILE
+
+Options:
+  -f, --fmin FMIN
+  -F, --fmax FMAX
+  -b, --noibox NOIBOX
+  -o, --outfile OUTFILE
+  -i, --infile INFILE
+  -p, --perd PSEL     Write periodograms
+  -s, --ofac OFAC     Oversampling factor [default: 6]
+  -t, --outfmt FMT    Output format for parameter file [ascii|fits|plainfits]
+  -n, --num NUMLIM
+  -N, --snr SNRLIM
+  -a, --amp AMPLIM
+
+
+-p 0,1,2,3,-1
+peaks_perd_0000.fits
+peaks_perd_0001.fits
+ :
+peaks_perd_0097.fits
+
+pysca -f 0.5 -F 20.0 -r 3.0 -s 10.0 -o peaks.fits timeseries.txt
+
+
+infiles:
+    timeseries       ascii | fits    2 cols
+    [parameters]     ascii | fits[tbl|img]    1-4 cols, ignoreing col5
+
+outfiles:
+    parameters       ascii | fits[tbl|img]
+    [periodograms]   fits

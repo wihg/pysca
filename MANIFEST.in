@@ -1,2 +1,3 @@
-include *.txt
+include *.txt *.sh
 include bin/pysca
+recursive-include licenses *.txt

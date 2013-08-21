@@ -18,7 +18,7 @@ data = pyfits.getdata(os.path.join(in_dir, in_fname))
 data = data[isfinite(data[:,1])]
 #data = data[:360000]
 #data = data[:38664]
-#data = data[:30000]
+data = data[:3000]
 t, a = data[:,0], data[:,1]
 
 #p = Pysca(t, a, 0.15, 70.0, 3.0, ofac=6.0)
@@ -34,19 +34,20 @@ p = Pysca(t, a, 0.5, 20.0, 3.0, ofac=10)
 for i in range(7):
     print i
     p.step()
+res = p.result.view(recarray)
 
-print p.freqs
-print p.amplitudes
-print p.phases
+print res.freq
+print res.amp
+print res.phase
 
-freq0 = pyfits.getdata(os.path.join(in_dir, in_fname), 1).freq[:len(p.results)]
-amp0 = pyfits.getdata(os.path.join(in_dir, in_fname), 1).amp[:len(p.results)]
-phi0 = pyfits.getdata(os.path.join(in_dir, in_fname), 1).phi[:len(p.results)]
-x = c_[freq0, freq0-p.freqs, amp0-p.amplitudes, phi0-p.phases]
+freq0 = pyfits.getdata(os.path.join(in_dir, in_fname), 1).freq[:len(res)]
+amp0 = pyfits.getdata(os.path.join(in_dir, in_fname), 1).amp[:len(res)]
+phi0 = pyfits.getdata(os.path.join(in_dir, in_fname), 1).phi[:len(res)]
+x = c_[freq0, freq0-res.freq, amp0-res.amp, phi0-res.phase]
 print x
 
-#print 100 * abs((p.amplitudes - amp0) / amp0)
-#print 100 * abs((p.phases - phi0) / phi0)
+#print 100 * abs((res.amp - amp0) / amp0)
+#print 100 * abs((res.phase - phi0) / phi0)
 
-#for ri in p.results:
+#for ri in res:
     #print '%.2f  %.2f  %.2f' % (ri.freq, ri.amp, ri.phase)

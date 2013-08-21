@@ -1,9 +1,8 @@
-from __future__ import absolute_import
+from __future__ import absolute_import, print_function
 
-import collections
 import numpy as np
 from . import utils, fit
-from .utils import ExportDecorator
+from .utils import ExportDecorator, VerbosePrinter
 
 __author__ = 'Kolja Glogowski, Wiebke Herzberg'
 __maintainer__ = 'Kolja Glogowski'
@@ -54,6 +53,8 @@ class Pysca(object):
         self._snr_width = float(snr_width) if snr_width != None else None
         self._ofac = float(ofac)
         self._hifreq = float(hifreq) if hifreq != None else self._numax
+        self._verbose = int(verbose)
+        self._vprint = VerbosePrinter(self._verbose)
         self._prev_ts = self._next_ts = None
         self._nu = self._orig_per = self._prev_per = self._next_per = None
         self._freqs = []      # List of extracted frequencies
@@ -124,7 +125,7 @@ class Pysca(object):
         return len(self._freqs)
 
     @property
-    def results(self):
+    def result(self):
         if self._results == None:
             self._results = np.rec.fromarrays(
                 [ self.freqs, self.amplitudes, self.phases, self.noise,
@@ -217,7 +218,7 @@ class Pysca(object):
         amp_limit = float(amp_limit) if amp_limit != None else None
         snr_limit = float(snr_limit) if snr_limit != None else None
         if n == None and amp_limit == None and snr_limit == None:
-            raise RuntimeError('No termination condition was set.')
+            raise ValueError('No termination condition specified')
 
         i = 0
         while True:

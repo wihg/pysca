@@ -103,7 +103,7 @@ def read_params(fname, fmt='auto', as_sarray=True, add_noise_cols=False):
         Set to False to return a plain ndarray instead of a structured array.
     add_noise_cols : bool (optional)
         Add noise/snr columns, even if the file does not contain noise/snr
-        columns. Rmpty noise/snr columns are filled with nan values.
+        columns. Empty noise/snr columns are filled with nan values.
 
     Returns
     -------
@@ -282,3 +282,7 @@ def write_params(fname, params, fmt='fits-tbl', add_to_header=None,
 
         # Finally write the FITS file.
         hdus.writeto(fname)
+
+@export
+def write_periodogram(fname, nu, p, add_to_header=None, clobber=False):
+    pass

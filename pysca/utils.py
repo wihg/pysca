@@ -1,5 +1,6 @@
-from __future__ import absolute_import, division
+from __future__ import absolute_import, print_function, division
 
+import sys
 import numpy as np
 from ._fasper import fasper
 
@@ -18,6 +19,27 @@ class ExportDecorator(object):
 
 __all__ = []
 export = ExportDecorator(__all__)
+
+class VerbosePrinter(object):
+    def __init__(self, verbose=1):
+        self.verbose = verbose
+    def __call__(self, *values, **kwargs):
+        """
+        __call__(value, ..., v=1, sep=' ', end='\\n', file=sys.stdout, flush=False)
+
+        Prints message if the verbose level is lesser or equal to the value of
+        the v keyword argument. The default is v=1. All other argument follow
+        the Python 3.3 print() function interface.
+        """
+        v = kwargs.pop('v', 1)
+        if v > self.verbose:
+            return
+        flush = kwargs.pop('flush', False)
+        if flush:
+            file = kwargs.get('file', sys.stdout)
+        print(*values, **kwargs)
+        if flush:
+            file.flush()
 
 @export
 def compute_periodogram(t, a, ofac, hifreq):

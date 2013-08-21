@@ -1,3 +1,5 @@
+from __future__ import absolute_import, print_function
+
 import os, pyfits, time
 from pysca import Pysca
 from pysca.io import *
@@ -19,9 +21,9 @@ t, a = t[:n], a[:n]
 
 p = Pysca(t, a, 0.5, 20.0, 3.0, ofac=6)
 for i in range(7):
-    print i
+    print(i)
     p.step()
-res = p.results.view(recarray)
+res = p.result.view(recarray)
 
 freq0 = pyfits.getdata(in_fname, 1).freq[:len(res)]
 amp0 = pyfits.getdata(in_fname, 1).amp[:len(res)]
@@ -32,11 +34,11 @@ for i in range(len(res)):
     ix.append(argmin(abs(freq0 - res.freq[i])))
 res = res[ix]
 
-print res.freq
-print res.amp
-print res.phase
+print(res.freq)
+print(res.amp)
+print(res.phase)
 
 x = c_[freq0, freq0-res.freq, amp0-res.amp, phi0-res.phase]
-print x; print
+print(x); print()
 y = c_[(freq0-res.freq)/freq0, (amp0-res.amp)/amp0, (phi0-res.phase)/phi0]
-print c_[freq0, abs(y) * 100]
+print(c_[freq0, abs(y) * 100])

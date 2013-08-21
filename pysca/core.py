@@ -50,17 +50,45 @@ class Pysca(object):
         elif len(self._t) != len(self._a):
             raise ValueError('Input arrays must have the same sizes')
         self._numin, self._numax = float(numin), float(numax)
-        self._snr_width = float(snr_width) if snr_width != None else None
+        self._snr_width = float(snr_width) if snr_width else None
         self._ofac = float(ofac)
         self._hifreq = float(hifreq) if hifreq != None else self._numax
         self._verbose = int(verbose)
         self._vprint = VerbosePrinter(self._verbose)
         self._prev_ts = self._next_ts = None
         self._nu = self._orig_per = self._prev_per = self._next_per = None
-        self._freqs = []      # List of extracted frequencies
-        self._noise = []      # List of corresponding noise levels
-        self._optpar = None   # Start values (am, ph) for the fit (prewhiten)
-        self._results = None  # Caching variable for results
+
+        dnames = [ 'freq', 'amp', 'phase', 'noise', 'snr' ]
+        if not self._snr_width:
+            dnames = dnames[:3]
+        self._params = np.empty(0, dtype=[(dni, 'f8') for dni in dnames])
+        self._params = self._params.view(np.recarray)
+
+    def _append_to_params(self, freq, amp, phase, noise=np.nan, snr=np.nan):
+        a = np.empty(self._params.shape[0]+1, dtype=self._params.dtype)
+        a[:-1] = self._params
+        if len(a.dtype) == 3:
+            a[-1] = (freq, amp, phase)
+        else:
+            a[-1] = (freq, amp, phase, noise, snr)
+        self._params = a.view(np.recarray)
+
+    def _update_params(self, freq, amp, phase, noise=None, snr=None):
+        a = np.empty(self._params.shape[0]+1, dtype=self._params.dtype)
+        a = a.view(np.recarray)
+        a.freq = freq
+        a.amp = amp
+        a.phase = phase
+        if len(a.dtype) > 3:
+            if noise != None:
+                a.noise = noise
+            else:
+                a.noise.fill(np.nan)
+            if snr != None:
+                a.snr = snr
+            else:
+                a.snr.fill(np.nan)
+        self._params = a
 
     @property
     def numin(self):
@@ -122,36 +150,11 @@ class Pysca(object):
 
     @property
     def count(self):
-        return len(self._freqs)
+        return len(self._params)
 
     @property
     def result(self):
-        if self._results == None:
-            self._results = np.rec.fromarrays(
-                [ self.freqs, self.amplitudes, self.phases, self.noise,
-                  self.snr],
-                names=['freq', 'amp', 'phase', 'noise', 'snr'])
-        return self._results
-
-    @property
-    def freqs(self):
-        return np.array(self._freqs, dtype=np.float64)
-
-    @property
-    def amplitudes(self):
-        return self._optpar[:,0] if self._optpar != None else np.array([])
-
-    @property
-    def phases(self):
-        return self._optpar[:,1] if self._optpar != None else np.array([])
-
-    @property
-    def noise(self):
-        return np.array(self._noise, dtype=np.float64)
-
-    @property
-    def snr(self):
-        return self.amplitudes / self.noise
+        return self._params
 
     def _calc_periodogram(self, t, a):
         return utils.compute_periodogram(t, a, self.ofac, self.hifreq)
@@ -164,6 +167,7 @@ class Pysca(object):
         return utils.find_highest_peak(nu, per)
 
     def step(self):
+        vprint = self._vprint
         if self._next_per == None:
             self._next_per = self.orig_periodogram
             self._next_ts = self.orig_ts
@@ -172,32 +176,62 @@ class Pysca(object):
         nu, per = self.nu, self.next_periodogram
 
         # Find frequency of the highest peak in the current periodogram
-        freq = self._find_highest_peak(nu, per)
-        self._freqs.append(freq)
+        new_freq = np.r_[self._params.freq, self._find_highest_peak(nu, per)]
 
-        # Prewhiten the original time series with all extracted frequencies
-        new_ts, new_optpar = fit.prewhiten_compat(
-            self.t, self.orig_ts, self._freqs, self._optpar)
+        # Fit original time series using already extracted mode parameters
+        new_amp, new_phase, ok, misc = fit.fit_timeseries(self.t,
+            self.orig_ts, new_freq, self._params.amp, self._params.phase)
+        if not ok:
+            raise PyscaError('Harmonic fit failed for peak frequency %f' % (
+                new_freq[-1]))
 
-        # amplitude of the previously extracted frequency
-        amp = new_optpar[-1][0]
+        # Prewhiten the original time series using the new mode parameters
+        new_ts = fit.prewhiten(self.t, self.orig_ts, new_freq, new_amp,
+                               new_phase)
 
         # Compute new periodogram from the prewhitened time series
         new_nu, new_per = self._calc_periodogram(self.t, new_ts)
 
         # Compute noise for the last extracted frequency using the median
-        noise = utils.median_noise_level(nu, new_per, freq, self.snr_width)
-        self._noise.append(noise)
+        if self.snr_width:
+            noise = utils.median_noise_level(
+                nu, new_per, new_freq[-1], self.snr_width)
+            snr = new_amp[-1] / noise
+            new_noise = np.r_[self._params.noise, noise]
+            new_snr = np.r_[self._params.snr, snr]
+        else:
+            new_noise = new_snr = None
+
+        if self.snr_width:
+            vprint('freq = %f, amp = %f, phase = %f, noise = %f, snr = %f' % (
+                    new_freq[-1], new_amp[-1], new_phase[-1],
+                    new_noise[-1], new_snr[-1]), v=1)
+        else:
+            vprint('freq = %f, amp = %f, phase = %f' % (
+                    new_freq[-1], new_amp[-1], new_phase[-1]), v=1)
 
         # Update object data
+        self._update_params(new_freq, new_amp, new_phase, new_noise, new_snr)
         self._prev_per = self._next_per
         self._prev_ts = self._next_ts
         self._next_per = new_per
         self._next_ts = new_ts
-        self._optpar = new_optpar
 
-        # clear results cache
-        self._results = None
+    def check_term_conditions(self, amp, snr):
+        """
+        Returns
+        -------
+        True, if the limits are met; otherwise False.
+        """
+        if len(self._params) == 0:
+            return True
+        amp = float(amp) if amp != None else None
+        snr = float(snr) if snr != None else None
+        if amp != None and self._params.amp[-1] < amp:
+            return False
+        if snr != None and self._params.snr[-1] < snr:
+            return False
+        return True
 
     def run(self, n=1, amp_limit=None, snr_limit=None):
         """
@@ -210,13 +244,11 @@ class Pysca(object):
         snr_limit : float or None
             signal-to-noise limit (termination condition); default: no limit
 
-        Return
-        ------
+        Returns
+        -------
             number of iterations
         """
         n = int(n) if n != None else None
-        amp_limit = float(amp_limit) if amp_limit != None else None
-        snr_limit = float(snr_limit) if snr_limit != None else None
         if n == None and amp_limit == None and snr_limit == None:
             raise ValueError('No termination condition specified')
 
@@ -224,12 +256,8 @@ class Pysca(object):
         while True:
             if n != None and i >= n:
                 return i
-            if self.count > 0:
-                if amp_limit != None and self.amplitudes.min() < amp_limit:
-                    return i
-                if snr_limit != None and self.snr.min() < snr_limit:
-                    return i
+            if not self.check_term_conditions(amp_limit, snr_limit):
+                return i
             self.step()
             i += 1
         return i
-

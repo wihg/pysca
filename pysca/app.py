@@ -1,6 +1,6 @@
 from __future__ import absolute_import, print_function
 
-import os, sys, textwrap
+import os, sys, time, textwrap, pyfits
 import numpy as np
 from . import __version__, Pysca
 from .utils import VerbosePrinter
@@ -112,12 +112,21 @@ class Application(object):
             print(args)
         self.args = args
 
+    def _create_header_entries(self):
+        c1 = pyfits.Card('DATE',
+            time.strftime('%Y-%m-%dT%H:%M:%S', time.gmtime()),
+            '[UTC] file creation time')
+        c2 = pyfits.Card('CREATOR',
+            'pysca v' + __version__,
+            'program that created this file')
+        return [c1, c2]
+
     def run(self):
         args = self.args
         vprint = VerbosePrinter(args.verbose)
 
         # Read time series file.
-        vprint("Loading time series '%s'..." % args.tsfile, v=2)
+        vprint("Loading time series from '%s'..." % args.tsfile, v=2)
         try:
             t, a = read_timeseries(args.tsfile)
         except (IOError, ValueError) as ex:
@@ -126,10 +135,9 @@ class Application(object):
 
         # Read parameter file, if specified.
         if args.infile != None:
-            vprint("Loading mode parameters '%s'..." % args.infile, v=2)
+            vprint("Loading mode parameters from '%s'..." % args.infile, v=2)
             try:
-                inpar = read_params(
-                    args.infile, add_noise_cols=bool(args.noibox))
+                inpar = read_params(args.infile)
 
                 # Check if the file looks like a time series.
                 if len(inpar) > 1000 and np.all(np.isnan(inpar['phase'])):
@@ -145,11 +153,53 @@ class Application(object):
         vprint('Extracting mode parameters...', v=2)
         p = Pysca(t, a, args.freq[0], args.freq[1], args.noibox,
                   ofac=args.ofac, verbose=args.verbose)
-        p.run(args.num)
-        print(p.result)
+        p.run(args.num, amp_limit=args.amp, snr_limit=args.snr)
+        res = p.result
 
+        # Write mode parameters
+        header_info = self._create_header_entries()
+        if len(res) > 0:
+            vprint("Writing results to '%s'..." % args.outfile, v=2)
+            try:
+                outfmt = args.outfmt
+                if outfmt == 'plainfits':
+                    outfmt = 'fits-img'
+                write_params(args.outfile, res, fmt=outfmt,
+                             add_to_header=header_info, clobber=True)
+            except (IOError, ValueError) as ex:
+                print('Error writing parameter file: %s.\n' % ex,
+                      file=sys.stderr)
+                return 1
+
+        # Write periodograms
+        if args.perd:
+            vprint("Writing periodograms...", v=2)
+            fname_mask = '%s.perd_%04d.fits'
+            nu = p.nu
+            perd0 = p.orig_periodogram
+            perd1 = p.next_periodogram
+            try:
+                if perd0 != None:
+                    write_periodogram(fname_mask % (args.outfile, 0),
+                        nu, perd0, add_to_header=header_info, clobber=True)
+                if perd1 != None:
+                    write_periodogram(fname_mask % (args.outfile, len(res)),
+                        nu, perd1, add_to_header=header_info, clobber=True)
+            except (IOError, ValueError) as ex:
+                print('Error writing periodograms: %s.\n' % ex,
+                      file=sys.stderr)
+                return 1
+
+        vprint('Done.', v=2)
         return 0
 
+def main():
+    try:
+        app = Application()
+        sys.exit(app.run())
+    except KeyboardInterrupt:
+        raise
+        sys.exit(0)
+
 if __name__ == '__main__':
-    app = Application()
-    sys.exit(app.run())
+    main()

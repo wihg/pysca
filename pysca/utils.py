@@ -66,7 +66,7 @@ def compute_periodogram(t, a, ofac, hifreq):
     """
     t, a = np.atleast_1d(t, a)
     if t.ndim > 1 or a.ndim > 1:
-        raise ValueError('Input arrays must be 1d.')
+        raise ValueError('Input arrays must be 1d')
     nu, p, nout, jmax, var = fasper(t, a, float(ofac), hifreq=float(hifreq))
 
     # Note: amplitudes from fasper are not scaled correctly. To get
@@ -95,7 +95,7 @@ def find_highest_peak(nu, p):
     """
     nu, p = np.atleast_1d(nu, p)
     if nu.ndim > 1 or p.ndim > 1:
-        raise ValueError('Input arrays must be 1d.')
+        raise ValueError('Input arrays must be 1d')
 
     # Get index of highest peak.
     imax = np.argmax(p)
@@ -143,7 +143,7 @@ def median_noise_level(nu, p, nu0, width):
     """
     nu, p = np.atleast_1d(nu, p)
     if nu.ndim > 1 or p.ndim > 1:
-        raise ValueError('Input arrays must be 1d.')
+        raise ValueError('Input arrays must be 1d')
     nu0, width = float(nu0), float(width)
     idx = (nu >= nu0 - 0.5 * width) & (nu <= nu0 + 0.5 * width)
     return np.median(p[idx])

@@ -278,11 +278,43 @@ def write_params(fname, params, fmt='fits-tbl', add_to_header=None,
         if add_to_header != None:
             h = hdus[0].header
             for ci in add_to_header:
-                h.update(ci.key, ci.value, ci.comment)
+                if pyfits.__version__ < '3.1.2':
+                    h.update(ci.key, ci.value, ci.comment)
+                else:
+                    h.set(ci.keyword, ci.value, ci.comment)
 
         # Finally write the FITS file.
         hdus.writeto(fname)
 
 @export
 def write_periodogram(fname, nu, p, add_to_header=None, clobber=False):
-    pass
+    """
+    """
+    nu, p = np.atleast_1d(nu, p)
+    if nu.ndim > 1 or p.ndim > 1:
+        raise ValueError('Input arrays must be 1d')
+    if len(nu) != len(p):
+        raise ValueError('Input arrays must have the same size')
+
+    # Check if the file exists and remove it if clobber is set.
+    if os.path.exists(fname):
+        if clobber:
+            os.remove(fname)
+        else:
+            raise IOError("File '%s' already exists" % fname)
+
+    hdu = pyfits.PrimaryHDU(np.c_[nu, p])
+
+    # Update NAXIS1 comment and add additional header entries. The way this
+    # is done should be compatible with older PyFITS versions.
+    h = hdu.header
+    h.update('naxis1', h['naxis1'], 'NU, PERIODOGRAM')
+    if add_to_header != None:
+        for ci in add_to_header:
+            if pyfits.__version__ < '3.1.2':
+                h.update(ci.key, ci.value, ci.comment)
+            else:
+                h.set(ci.keyword, ci.value, ci.comment)
+
+    # Write data to disk.
+    hdu.writeto(fname)

@@ -8,9 +8,9 @@ except ImportError:
     from distutils.core import setup
 
 NAME = 'pysca'
-README = open('README.txt').readlines()
-DESCRIPTION = README[0]
-LONG_DESCRIPTION = '\n'.join(README[2:])
+DESCRIPTION = 'A tool for automated frequency extraction from photometric ' \
+              'time series of heat-driven pulsators.'
+LONG_DESCRIPTION = open('README.txt').read()
 AUTHOR = 'Wiebke Herzberg, Kolja Glogowski'
 AUTHOR_EMAIL = '"Kolja Glogowski" <kolja@kis.uni-freiburg.de>'
 URL = 'http://pypi.python.org/pypi/pysca'

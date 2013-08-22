@@ -1,13 +1,11 @@
 #!/bin/bash
 
-__base_dir=$(cd `dirname "${BASH_SOURCE[0]}"` && pwd -P)
+export PYSCA_DIR=$(cd `dirname "${BASH_SOURCE[0]}"` && pwd -P)
 
 if [ -z "$PYTHONPATH" ]; then
-    export PYTHONPATH=${__base_dir}
+    export PYTHONPATH=${PYSCA_DIR}
 else
-    export PYTHONPATH=${__base_dir}:${PYTHONPATH}
+    export PYTHONPATH=${PYSCA_DIR}:${PYTHONPATH}
 fi
 
-export PATH=${__base_dir}/bin:$PATH
-
-unset __base_dir
+export PATH=${PYSCA_DIR}/bin:$PATH

@@ -14,4 +14,6 @@ __author__ = 'Wiebke Herzberg, Kolja Glogowski'
 __maintainer__ = 'Kolja Glogowski'
 __email__ = 'kolja@kis.uni-freiburg.de'
 __license__ = 'MIT'
-__version__ = '0.1.0'
+
+# use X.Y.Z.dev for development pre-release
+__version__ = '0.1.1'

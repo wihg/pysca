@@ -1,3 +1,4 @@
 include *.txt *.sh
 include bin/pysca
 recursive-include licenses *.txt
+recursive-include examples *.py

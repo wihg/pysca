@@ -9,21 +9,24 @@ from numpy import *
 ##in_fname = 'data/scdata/LC_6761539.fits'
 #in_fname = 'data/scdata/LC_6443122.fits'
 #in_fname = 'data/lcdata/lc_6761539_tpf_chisq-ppm.dat'
-in_fname = 'test_lc_2.fits'
-#in_fname = 'test_lc_2_s200.fits'
+#in_fname = 'test_lc_2.fits'
+in_fname = 'test_lc_2_s200.fits'
 
 #n = None
-n = 4000
+n = 5000
 #n = 2000
 
 t, a = read_timeseries(in_fname)
 t, a = t[:n], a[:n]
 
-p = Pysca(t, a, 0.5, 20.0, 3.0, ofac=6)
-for i in range(7):
-    print(i)
-    p.step()
-res = p.result.view(recarray)
+try:
+    p = Pysca(t, a, 0.5, 20.0, 3.0, ofac=6)
+    for i in range(11):
+        print(i)
+        p.step()
+    res = p.result.view(recarray)
+except KeyboardInterrupt:
+    print('muh')
 
 freq0 = pyfits.getdata(in_fname, 1).freq[:len(res)]
 amp0 = pyfits.getdata(in_fname, 1).amp[:len(res)]

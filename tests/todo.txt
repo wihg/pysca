@@ -1,0 +1,3 @@
+Signal handler for SIGINT/SIGTERM:
+  - Prevent interruption while writing to files.
+  - Disable SIGINT/SIGTERM during leastsq.

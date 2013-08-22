@@ -1,9 +1,9 @@
 from __future__ import absolute_import, print_function
 
-import os, sys, time, textwrap, pyfits
+import os, sys, signal, time, textwrap, pyfits
 import numpy as np
-from . import __version__, Pysca
-from .utils import VerbosePrinter
+from . import __version__, Pysca, PyscaError
+from .utils import VerbosePrinter, disable_signal
 from .io import *
 
 try:
@@ -43,11 +43,11 @@ class Application(object):
         except SystemExit:
             print()
             raise
+        self._vprint = VerbosePrinter(self.args.verbose)
 
     def _parse_args(self):
         parser = argparse.ArgumentParser(
             prog=self.name,
-            usage=None,
             #description=DESCRIPTION,
             #epilog=DESCRIPTION,
             add_help=False,
@@ -55,7 +55,7 @@ class Application(object):
                 argparse.HelpFormatter(prog, max_help_position=30))
 
         g = parser.add_argument_group('Required arguments')
-        g.add_argument('tsfile', metavar='TSFILE',
+        g.add_argument('tsfile', metavar='TS_FILE',
                        help='The file containing the time series. '
                            +'Supported are ASCII and FITS files with two '
                            +'columns, where the first column contains the '
@@ -65,7 +65,7 @@ class Application(object):
                        help='Frequency range used for peak finding')
         g.add_argument('-b', '--noibox', metavar='NBOX', required=True,
                        type=lambda s: ge_validator(s, 0, float),
-                       help='Frequency range used for noise calculation; '
+                       help='Frequency width used for noise calculation; '
                            +'can be set to 0 if no noise should be calculated')
         g.add_argument('-o', '--outfile', metavar='FILE', required=True,
                        help='Output file for the resulting mode parameters')
@@ -73,13 +73,13 @@ class Application(object):
         g = parser.add_argument_group('Termination conditions')
         g.add_argument('-n', '--num',
                        type=lambda s: gt_validator(s, 0, int),
-                       help='Maximum number of iterations')
+                       help='Maximum number extracted frequencies')
         g.add_argument('-N', '--snr',
                        type=lambda s: gt_validator(s, 0, float),
-                       help='SNR termination condition')
+                       help='SNR limit termination condition')
         g.add_argument('-a', '--amp',
                        type=lambda s: gt_validator(s, 0, float),
-                       help='Amplitude termination condition')
+                       help='Amplitude limit termination condition')
 
         g = parser.add_argument_group('Optional arguments')
         g.add_argument('-s', '--ofac', default=6.0,
@@ -87,7 +87,7 @@ class Application(object):
                        help='Oversampling factor used for the Lomb-Scargle '
                            +'periodogram (default: %(default)s)')
         g.add_argument('-i', '--infile', metavar='FILE',
-                       help='Read mode parameters file')
+                       help='Read mode parameters from a file and continue')
         g.add_argument('-p', '--perd', action='store_true',
                        help='Write original and last periodogram to file')
         g.add_argument('-t', '--outfmt', metavar='FMT', default='ascii',
@@ -121,9 +121,26 @@ class Application(object):
             'program that created this file')
         return [c1, c2]
 
+    @disable_signal(signal.SIGINT)
+    @disable_signal(signal.SIGTERM)
+    def _write_params(self, fname, res, header_info):
+        self._vprint("Writing results to '%s'" % fname, v=2)
+        try:
+            outfmt = self.args.outfmt
+            if outfmt == 'plainfits':
+                outfmt = 'fits-img'
+            write_params(fname, res, fmt=outfmt, add_to_header=header_info,
+                         clobber=True)
+        except (IOError, ValueError) as ex:
+            print('Error writing parameter file: %s.\n' % ex, file=sys.stderr)
+            return False
+        return True
+
     def run(self):
         args = self.args
-        vprint = VerbosePrinter(args.verbose)
+        tmp_out_fname = args.outfile + '.tmp'
+        vprint = self._vprint
+        stime = time.time()
 
         # Read time series file.
         vprint("Loading time series from '%s'..." % args.tsfile, v=2)
@@ -148,28 +165,49 @@ class Application(object):
                 print('Error reading parameter file: %s.\n' % ex,
                       file=sys.stderr)
                 return 1
+        else:
+            inpar = None
 
-        # Initialize Pysca
-        vprint('Extracting mode parameters...', v=2)
+        # Start extraction.
         p = Pysca(t, a, args.freq[0], args.freq[1], args.noibox,
-                  ofac=args.ofac, verbose=args.verbose)
-        p.run(args.num, amp_limit=args.amp, snr_limit=args.snr)
+                  ofac=args.ofac, params=inpar, verbose=args.verbose)
+        try:
+            i = 0
+            while True:
+                ltime = time.time()
+
+                if args.num != None and i >= args.num:
+                    break
+                if not p.check_term_conditions(args.amp, args.snr):
+                    break
+
+                # Extract next parameter set
+                p.step()
+
+                # Write results to temporary file
+                header_info = self._create_header_entries()
+                if len(p.result) > 0:
+                    if not self._write_params(
+                            tmp_out_fname, p.result, header_info):
+                        return 1
+
+                t = time.time()
+                vprint('Time: %.2f secs' % (t-ltime), ', Total: %.2f secs' % (
+                    t-stime), '\n', sep='', v=1)
+                i += 1
+        except PyscaError as ex:
+            print('Error: %s.\n' % ex,file=sys.stderr)
+            return 1
+
         res = p.result
 
         # Write mode parameters
         header_info = self._create_header_entries()
         if len(res) > 0:
-            vprint("Writing results to '%s'..." % args.outfile, v=2)
-            try:
-                outfmt = args.outfmt
-                if outfmt == 'plainfits':
-                    outfmt = 'fits-img'
-                write_params(args.outfile, res, fmt=outfmt,
-                             add_to_header=header_info, clobber=True)
-            except (IOError, ValueError) as ex:
-                print('Error writing parameter file: %s.\n' % ex,
-                      file=sys.stderr)
+            if not self._write_params(args.outfile, res, header_info):
                 return 1
+            vprint("Removing '%s'" % tmp_out_fname, v=2)
+            os.remove(tmp_out_fname)
 
         # Write periodograms
         if args.perd:
@@ -190,7 +228,7 @@ class Application(object):
                       file=sys.stderr)
                 return 1
 
-        vprint('Done.', v=2)
+        vprint('Done.\n', v=2)
         return 0
 
 def main():
@@ -198,7 +236,6 @@ def main():
         app = Application()
         sys.exit(app.run())
     except KeyboardInterrupt:
-        raise
         sys.exit(0)
 
 if __name__ == '__main__':

@@ -147,7 +147,7 @@ def read_params(fname, fmt='auto', as_sarray=True, add_noise_cols=False):
     elif fmt == 'ascii':
         # ASCII file.
         # Adjusting array to 3 or 5 columns.
-        data = np.loadtxt(fname)
+        data = np.atleast_2d(np.loadtxt(fname))
         has_noise = (data.shape[1] >= 5)
         ncols = 5 if (has_noise or add_noise_cols) else 3
         if data.shape[1] != 5:

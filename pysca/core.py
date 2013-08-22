@@ -19,7 +19,7 @@ class PyscaError(Exception):
 @export
 class Pysca(object):
     def __init__(self, t, a, numin, numax, snr_width, ofac=6.0, hifreq=None,
-                 verbose=0):
+                 params=None, verbose=0):
         """
         Pysca(t, a, numin, numax, snr_width, ofac=6.0, hifreq=None)
 
@@ -38,8 +38,10 @@ class Pysca(object):
             signal-to-noise calculation
         ofac : float
             oversampling factor used for the Lomb-Scargle periodogram
-        hifreq : None
+        hifreq : None or float
             maximum frequency of the Lomb-Scargle periodogram; default: numax
+        params : None or structured array
+            custom parameters, e.g. from a previous run, default: None
         verbose : int
             verbose level from 0 (quiet) to 2 (verbose); default 0
         """
@@ -49,6 +51,7 @@ class Pysca(object):
             raise ValueError('Input arrays must be 1d')
         elif len(self._t) != len(self._a):
             raise ValueError('Input arrays must have the same sizes')
+
         self._numin, self._numax = float(numin), float(numax)
         self._snr_width = float(snr_width) if snr_width else None
         self._ofac = float(ofac)
@@ -61,7 +64,16 @@ class Pysca(object):
         dnames = [ 'freq', 'amp', 'phase', 'noise', 'snr' ]
         if not self._snr_width:
             dnames = dnames[:3]
-        self._params = np.empty(0, dtype=[(dni, 'f8') for dni in dnames])
+        if params != None and (dnames[0] in params.dtype.names):
+            self._params = np.empty(
+                len(params), dtype=[(dni, 'f8') for dni in dnames])
+            for dni in dnames:
+                if dni in params.dtype.names:
+                    self._params[dni] = params[dni]
+                else:
+                    self._params[dni] = np.nan
+        else:
+            self._params = np.empty(0, dtype=[(dni, 'f8') for dni in dnames])
         self._params = self._params.view(np.recarray)
 
     def _append_to_params(self, freq, amp, phase, noise=np.nan, snr=np.nan):
@@ -157,6 +169,7 @@ class Pysca(object):
         return self._params
 
     def _calc_periodogram(self, t, a):
+        self._vprint('Computing periodogram...', v=2)
         return utils.compute_periodogram(t, a, self.ofac, self.hifreq)
 
     def _find_highest_peak(self, nu, per, use_nuidx=True):
@@ -168,24 +181,56 @@ class Pysca(object):
 
     def step(self):
         vprint = self._vprint
+
+        # Check if the needed periodogram is in place
         if self._next_per == None:
-            self._next_per = self.orig_periodogram
-            self._next_ts = self.orig_ts
+            if len(self._params) == 0:
+                # No parameters yet, start with the original periodogram
+                vprint('Initializing...', v=1)
+                self._next_per = self.orig_periodogram
+                self._next_ts = self.orig_ts
+            else:
+                # There are already parameters, so we need to prewhiten the
+                # original time series, in order to get the next periodogram;
+                # in case any amplitudes or phases are missing or wrong, we
+                # first perform a fit to the time series.
+                vprint('Initializing [nfreqs: %d]...' % len(self._params), v=1)
+                vprint('Fitting time series...', v=2)
+                self._params.amp[np.isnan(self._params.amp)] = 1.0
+                self._params.phase[np.isnan(self._params.phase)] = 0.5
+                new_amp, new_phase, ok, misc = fit.fit_timeseries(self.t,
+                    self.orig_ts, self._params.freq, self._params.amp,
+                    self._params.phase)
+                if not ok:
+                    raise PyscaError('Harmonic fit failed [ier=%d]' % misc[3])
+                vprint('Prewhitening...', v=2)
+                new_ts = fit.prewhiten(self.t, self.orig_ts, self._params.freq,
+                                       new_amp, new_phase)
+                new_nu, new_per = self._calc_periodogram(self.t, new_ts)
+                self._next_per = new_per
+                self._next_ts = new_ts
+                self.orig_periodogram
+            vprint(v=1)
 
         # Select the next periodogram
         nu, per = self.nu, self.next_periodogram
 
         # Find frequency of the highest peak in the current periodogram
         new_freq = np.r_[self._params.freq, self._find_highest_peak(nu, per)]
+        vprint('Frequency #%d:' % len(new_freq), new_freq[-1], v=1)
 
         # Fit original time series using already extracted mode parameters
+        vprint('Fitting time series...', v=2)
         new_amp, new_phase, ok, misc = fit.fit_timeseries(self.t,
             self.orig_ts, new_freq, self._params.amp, self._params.phase)
         if not ok:
             raise PyscaError('Harmonic fit failed for peak frequency %f' % (
-                new_freq[-1]))
+                new_freq[-1]) + ' [ier=%d]' % misc[3])
+        vprint('Freq: ', new_freq[-1], ', Amp: ', new_amp[-1], ', Phase: ',
+               new_phase[-1], sep='', v=1)
 
         # Prewhiten the original time series using the new mode parameters
+        vprint('Prewhitening...', v=2)
         new_ts = fit.prewhiten(self.t, self.orig_ts, new_freq, new_amp,
                                new_phase)
 
@@ -199,16 +244,10 @@ class Pysca(object):
             snr = new_amp[-1] / noise
             new_noise = np.r_[self._params.noise, noise]
             new_snr = np.r_[self._params.snr, snr]
+            vprint('Noise: ', new_noise[-1], ', SNR: ',new_snr[-1],
+                   sep='', v=1)
         else:
             new_noise = new_snr = None
-
-        if self.snr_width:
-            vprint('freq = %f, amp = %f, phase = %f, noise = %f, snr = %f' % (
-                    new_freq[-1], new_amp[-1], new_phase[-1],
-                    new_noise[-1], new_snr[-1]), v=1)
-        else:
-            vprint('freq = %f, amp = %f, phase = %f' % (
-                    new_freq[-1], new_amp[-1], new_phase[-1]), v=1)
 
         # Update object data
         self._update_params(new_freq, new_amp, new_phase, new_noise, new_snr)
@@ -217,19 +256,29 @@ class Pysca(object):
         self._next_per = new_per
         self._next_ts = new_ts
 
-    def check_term_conditions(self, amp, snr):
+    def check_term_conditions(self, amp_limit=None, snr_limit=None):
         """
+        Check if the last extracted mode parameters are above the provided
+        limits.
+
+        Parameters
+        ----------
+        amp_limit : scalar
+            amplitude limit; default: no limit
+        snr_limit : scalar
+            signal-to-noise limit; default: no limit
+
         Returns
         -------
         True, if the limits are met; otherwise False.
         """
         if len(self._params) == 0:
             return True
-        amp = float(amp) if amp != None else None
-        snr = float(snr) if snr != None else None
-        if amp != None and self._params.amp[-1] < amp:
+        amp_limit = float(amp_limit) if amp_limit != None else None
+        snr_limit = float(snr_limit) if snr_limit != None else None
+        if amp_limit != None and self._params.amp[-1] < amp_limit:
             return False
-        if snr != None and self._params.snr[-1] < snr:
+        if snr_limit != None and self._params.snr[-1] < snr_limit:
             return False
         return True
 
@@ -248,6 +297,7 @@ class Pysca(object):
         -------
             number of iterations
         """
+        vprint = self._vprint
         n = int(n) if n != None else None
         if n == None and amp_limit == None and snr_limit == None:
             raise ValueError('No termination condition specified')
@@ -255,9 +305,10 @@ class Pysca(object):
         i = 0
         while True:
             if n != None and i >= n:
-                return i
+                break
             if not self.check_term_conditions(amp_limit, snr_limit):
-                return i
+                break
             self.step()
+            vprint(v=1)
             i += 1
         return i

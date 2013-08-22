@@ -1,7 +1,8 @@
 from __future__ import absolute_import, print_function, division
 
-import sys
+import sys, signal
 import numpy as np
+from functools import wraps
 from ._fasper import fasper
 
 __author__ = 'Wiebke Herzberg, Kolja Glogowski'
@@ -19,6 +20,20 @@ class ExportDecorator(object):
 
 __all__ = []
 export = ExportDecorator(__all__)
+
+def disable_signal(signum):
+    def func_wrapper(func):
+        @wraps(func)
+        def new_func(*args, **kwargs):
+            def new_handler(signum, frame):
+                print('MEH')
+            old_handler = signal.signal(signum, new_handler)
+            #old_handler = signal.signal(signum, lambda signum, frame: None)
+            result = func(*args, **kwargs)
+            signal.signal(signum, old_handler)
+            return result
+        return new_func
+    return func_wrapper
 
 class VerbosePrinter(object):
     def __init__(self, verbose=1):
@@ -146,4 +161,7 @@ def median_noise_level(nu, p, nu0, width):
         raise ValueError('Input arrays must be 1d')
     nu0, width = float(nu0), float(width)
     idx = (nu >= nu0 - 0.5 * width) & (nu <= nu0 + 0.5 * width)
-    return np.median(p[idx])
+    if np.any(idx):
+        return np.median(p[idx])
+    else:
+        return np.nan

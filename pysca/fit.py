@@ -185,11 +185,3 @@ def prewhiten(t, a, freq, amp, phi):
     if len(freq) != len(amp) or len(amp) != len(phi):
         raise ValueError("Arrays 'freq', 'amp' and 'phi' must have equal size")
     return a - harmfunc(t, freq, amp, phi)
-
-def prewhiten_compat(t, a, freqs, startpars=None):
-    if startpars == None:
-        amp0 = phi0 = None
-    else:
-        amp0, phi0 = startpars[:,0], startpars[:,1]
-    amp, phi, ok, misc = fit_timeseries(t, a, freqs, amp0, phi0)
-    return prewhiten(t, a, freqs, amp, phi), np.c_[amp, phi]

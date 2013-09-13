@@ -94,6 +94,7 @@ def _dfunc(amph, xdat, ydat, nu):
         res[n+i] = -am[i] * np.cos(2*np.pi * (nu[i]*xdat + ph[i])) * 2*np.pi
     return res
 
+@export
 def fit_timeseries(t, a, freq, amp0=None, phi0=None, **kwargs):
     """
     Fit a time series using a harmonic function with a fixed set of

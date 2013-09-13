@@ -16,4 +16,4 @@ __email__ = 'kolja@kis.uni-freiburg.de'
 __license__ = 'MIT'
 
 # use X.Y.Z.dev for development pre-release
-__version__ = '0.1.1'
+__version__ = '0.1.2'

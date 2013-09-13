@@ -1,5 +1,9 @@
 Pysca release changelog
 
+Changes from version 0.1.1 to 0.1.2
+-----------------------------------
+- Added fit_timeseries() to the list of exported functions
+
 Changes from version 0.1.0 to 0.1.1
 -----------------------------------
 - Updated documentation and added an example script

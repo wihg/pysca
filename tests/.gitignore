@@ -1,3 +1,5 @@
 /data
 *.fits
 *.dat
+*.pdf
+*.eps
